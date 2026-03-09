@@ -2,6 +2,21 @@
 // AI Service - Handles Gemini AI API calls using REST API
 import * as fs from "node:fs";
 import path from "node:path";
+import {
+  generateBlogTitlesPrompt,
+  generateYoutubeScriptPrompt,
+  generateThumbnailIdeaPrompt,
+  generateThumbnailImagePrompt,
+} from "../prompts/index.js";
+import {
+  validateAndCleanResponse,
+  formatForStorage,
+} from "../utils/responseValidator.js";
+import {
+  formatForClient,
+  addAuditInfo,
+  removeSensitiveData,
+} from "../utils/responseFormatter.js";
 
 // Gemini API base URL
 const GEMINI_API_URL =
@@ -91,22 +106,32 @@ const callGeminiAPI = async (model, prompt) => {
  */
 export const generateBlogTitles = async (topic, audience) => {
   try {
-    const prompt = `Generate 5 creative and SEO-friendly blog titles for the following:
-Topic: ${topic}
-Target Audience: ${audience}
-
-Return the titles as a numbered list (1-5). Make them engaging and clickable.`;
+    const prompt = generateBlogTitlesPrompt(topic, audience);
 
     const text = await callGeminiAPI("gemini-3-flash-preview", prompt);
 
-    // Parse the response to extract titles
-    const titles = text
-      .split("\n")
-      .filter((line) => line.trim())
-      .map((line) => line.replace(/^\d+\.\s*/, "").trim())
-      .filter((line) => line.length > 0);
+    // Validate and clean response
+    const validationResult = validateAndCleanResponse("blogTitles", text);
 
-    return titles;
+    if (!validationResult.success) {
+      console.error("Validation errors:", validationResult.errors);
+      throw new Error(
+        `Response validation failed: ${validationResult.errors.join(", ")}`,
+      );
+    }
+
+    // Log warnings if any
+    if (validationResult.warnings.length > 0) {
+      console.warn("Validation warnings:", validationResult.warnings);
+    }
+
+    // Format for client
+    const formattedResponse = formatForClient(
+      "blogTitles",
+      validationResult.validatedData,
+    );
+
+    return formattedResponse;
   } catch (error) {
     console.error("Error generating blog titles:", error.message);
     throw new Error(
@@ -123,32 +148,32 @@ Return the titles as a numbered list (1-5). Make them engaging and clickable.`;
  */
 export const generateYoutubeScript = async (topic, videoLength) => {
   try {
-    const lengthGuide = {
-      short: "2-3 minutes",
-      medium: "5-10 minutes",
-      long: "15+ minutes",
-    };
-
-    const prompt = `Create a YouTube video script for a ${lengthGuide[videoLength] || videoLength} video about: ${topic}
-
-Structure the script with:
-1. **INTRO** (Hook the viewer in 15-30 seconds)
-2. **MAIN CONTENT** (Divided into sections if needed)
-3. **CONCLUSION** (Call to action and closing)
-
-Make it engaging, natural, and suitable for video narration.`;
+    const prompt = generateYoutubeScriptPrompt(topic, videoLength);
 
     const text = await callGeminiAPI("gemini-3-flash-preview", prompt);
 
-    // Parse sections
-    const sections = {
-      intro: extractSection(text, "INTRO"),
-      content: extractSection(text, "MAIN CONTENT"),
-      conclusion: extractSection(text, "CONCLUSION"),
-      full: text,
-    };
+    // Validate and clean response
+    const validationResult = validateAndCleanResponse("youtubeScript", text);
 
-    return sections;
+    if (!validationResult.success) {
+      console.error("Validation errors:", validationResult.errors);
+      throw new Error(
+        `Response validation failed: ${validationResult.errors.join(", ")}`,
+      );
+    }
+
+    // Log warnings if any
+    if (validationResult.warnings.length > 0) {
+      console.warn("Validation warnings:", validationResult.warnings);
+    }
+
+    // Format for client
+    const formattedResponse = formatForClient(
+      "youtubeScript",
+      validationResult.validatedData,
+    );
+
+    return formattedResponse;
   } catch (error) {
     console.error("Error generating YouTube script:", error.message);
     throw new Error(
@@ -165,27 +190,32 @@ Make it engaging, natural, and suitable for video narration.`;
  */
 export const generateThumbnailIdea = async (videoTitle, style) => {
   try {
-    const prompt = `Create a thumbnail idea for a ${style} YouTube video with the title: "${videoTitle}"
-
-Provide:
-1. **Main Text for Thumbnail** - Short, punchy text (max 3-4 words)
-2. **Design Elements** - What visual elements/graphics to include
-3. **Color Scheme** - Recommended colors that pop
-4. **Tips** - Best practices for this thumbnail
-
-Format your response clearly with these sections.`;
+    const prompt = generateThumbnailIdeaPrompt(videoTitle, style);
 
     const text = await callGeminiAPI("gemini-3-flash-preview", prompt);
 
-    const thumbnail = {
-      mainText: extractSection(text, "Main Text"),
-      designElements: extractSection(text, "Design Elements"),
-      colorScheme: extractSection(text, "Color Scheme"),
-      tips: extractSection(text, "Tips"),
-      full: text,
-    };
+    // Validate and clean response
+    const validationResult = validateAndCleanResponse("thumbnailIdea", text);
 
-    return thumbnail;
+    if (!validationResult.success) {
+      console.error("Validation errors:", validationResult.errors);
+      throw new Error(
+        `Response validation failed: ${validationResult.errors.join(", ")}`,
+      );
+    }
+
+    // Log warnings if any
+    if (validationResult.warnings.length > 0) {
+      console.warn("Validation warnings:", validationResult.warnings);
+    }
+
+    // Format for client
+    const formattedResponse = formatForClient(
+      "thumbnailIdea",
+      validationResult.validatedData,
+    );
+
+    return formattedResponse;
   } catch (error) {
     console.error("Error generating thumbnail idea:", error.message);
     throw new Error(
@@ -202,17 +232,28 @@ Format your response clearly with these sections.`;
  */
 export const generateThumbnailImage = async (videoTitle, style) => {
   try {
-    const prompt = `Create a professional YouTube thumbnail image for a ${style} video titled "${videoTitle}". 
-Make it visually striking with:
-- Bold, readable text (max 3 words)
-- Contrasting colors
-- Attention-grabbing design
-- Professional layout`;
+    const prompt = generateThumbnailImagePrompt(videoTitle, style);
 
     const text = await callGeminiAPI("gemini-3.1-flash-image-preview", prompt);
 
-    // For image generation, return the description for now
-    // In production, you would need to handle image data properly
+    // Validate and clean response
+    const validationResult = validateAndCleanResponse("thumbnailImage", {
+      image: {
+        fileName: `thumbnail-${Date.now()}.png`,
+        style,
+        videoTitle,
+        description: text,
+      },
+    });
+
+    if (!validationResult.success) {
+      console.error("Validation errors:", validationResult.errors);
+      throw new Error(
+        `Response validation failed: ${validationResult.errors.join(", ")}`,
+      );
+    }
+
+    // Save file
     const fileName = `thumbnail-${Date.now()}.txt`;
     const filePath = path.join(process.cwd(), "uploads", fileName);
 
@@ -225,13 +266,19 @@ Make it visually striking with:
     // Save the description
     fs.writeFileSync(filePath, text);
 
-    return {
-      fileName,
+    const imageData = {
+      ...validationResult.validatedData.image,
       filePath: `/uploads/${fileName}`,
       url: `/api/uploads/${fileName}`,
-      description: text,
-      generated: new Date(),
     };
+
+    // Format for client
+    const formattedResponse = formatForClient("thumbnailImage", {
+      image: imageData,
+      generatedAt: new Date().toISOString(),
+    });
+
+    return formattedResponse;
   } catch (error) {
     console.error("Error generating thumbnail image:", error.message);
     throw new Error(
@@ -241,10 +288,8 @@ Make it visually striking with:
 };
 
 /**
- * Helper function to extract sections from the response
- * @param {string} text - Full response text
- * @param {string} sectionName - Section name to extract
- * @returns {string} Extracted section content
+ * Helper function to extract sections from the response (Legacy - for backward compatibility)
+ * @deprecated Use validators instead
  */
 const extractSection = (text, sectionName) => {
   try {
