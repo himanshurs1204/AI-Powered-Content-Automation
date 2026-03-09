@@ -21,8 +21,20 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
+// CORS Configuration
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS || "http://localhost:3000"
+).split(",");
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
+
 // Middleware
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -72,4 +84,3 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
-
